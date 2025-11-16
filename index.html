@@ -19,6 +19,21 @@
     .animate-fade-in {
       animation: fade-in 0.25s ease-out;
     }
+
+    @keyframes star-pop {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.25);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+    .star-pop {
+      animation: star-pop 0.2s ease-out;
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans">
@@ -105,7 +120,7 @@
     </section>
 
     <!-- Track filter -->
-    <section class="mb-6 sm:mb-8">
+    <section class="mb-4 sm:mb-6">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 class="text-xl sm:text-2xl font-semibold tracking-tight">Программа</h2>
@@ -138,23 +153,62 @@
       </div>
     </section>
 
+    <!-- Stream tabs -->
+    <section class="mb-6 sm:mb-8">
+      <div class="flex flex-wrap gap-2 text-xs sm:text-sm overflow-x-auto">
+        <button
+          type="button"
+          data-stream-tab="Все"
+          class="px-3 py-1.5 rounded-full border bg-slate-900 text-slate-100 border-slate-600 whitespace-nowrap transition">
+          Все потоки
+        </button>
+        <button
+          type="button"
+          data-stream-tab="Основной поток"
+          class="px-3 py-1.5 rounded-full border bg-transparent text-slate-400 border-slate-700/40 hover:bg-slate-900/40 hover:text-slate-100 whitespace-nowrap transition">
+          Основной поток
+        </button>
+        <button
+          type="button"
+          data-stream-tab="Поток 1"
+          class="px-3 py-1.5 rounded-full border bg-transparent text-slate-400 border-slate-700/40 hover:bg-slate-900/40 hover:text-slate-100 whitespace-nowrap transition">
+          Поток 1 (AI &amp; Инструменты)
+        </button>
+        <button
+          type="button"
+          data-stream-tab="Поток 2"
+          class="px-3 py-1.5 rounded-full border bg-transparent text-slate-400 border-slate-700/40 hover:bg-slate-900/40 hover:text-slate-100 whitespace-nowrap transition">
+          Поток 2 (Лидерство)
+        </button>
+        <button
+          type="button"
+          data-stream-tab="Поток 3"
+          class="px-3 py-1.5 rounded-full border bg-transparent text-slate-400 border-slate-700/40 hover:bg-slate-900/40 hover:text-slate-100 whitespace-nowrap transition">
+          Поток 3 (Коммуникации)
+        </button>
+      </div>
+    </section>
+
     <!-- Talks list -->
     <section>
       <div id="talks-container" class="space-y-4 sm:space-y-5 mb-8">
         <!-- Карточки сессий будут отрендерены из JS -->
       </div>
 
-      <div class="flex justify-center">
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
         <button
+          id="favoritesToggleBtn"
           type="button"
           class="inline-flex items-center gap-2 rounded-full bg-emerald-500 text-slate-950 text-sm font-medium px-5 py-2.5 shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/40 hover:-translate-y-0.5 active:translate-y-0 transition">
           <!-- Heroicons: Star -->
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none">
             <path d="M11.48 3.5a.75.75 0 011.04 0l2.14 2.26 2.96.69a.75.75 0 01.45 1.16L16.7 10.7l.32 2.99a.75.75 0 01-1.08.74L12 12.96l-3.94 1.47a.75.75 0 01-1.08-.74l.32-2.99-1.37-3.09a.75.75 0 01.45-1.16l2.96-.69 2.14-2.26z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/>
           </svg>
-          <span>Показать избранное</span>
-          <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-600/80 text-emerald-50">скоро</span>
+          <span id="favoritesToggleLabel">Показать избранное</span>
         </button>
+        <span id="favoritesCounter" class="text-xs sm:text-sm text-slate-400">
+          Избранные: 0
+        </span>
       </div>
     </section>
   </main>
@@ -295,15 +349,35 @@
 
     let currentTrackFilter = "Все треки";
     let currentSearchQuery = "";
+    let currentStreamFilter = "Все";
+    let showOnlyFavorites = false;
+    let favoritesSet = new Set();
 
     function normalizeString(str) {
       return (str || "").toString().toLowerCase();
+    }
+
+    function getTalkStream(talk) {
+      if (talk.room.startsWith("Поток 1")) return "Поток 1";
+      if (talk.room.startsWith("Поток 2")) return "Поток 2";
+      if (talk.room.startsWith("Поток 3")) return "Поток 3";
+      return "Основной поток";
     }
 
     function talkMatchesFilters(talk) {
       // Фильтр по треку
       if (currentTrackFilter && currentTrackFilter !== "Все треки") {
         if (talk.track !== currentTrackFilter) return false;
+      }
+
+      // Фильтр по потоку (вкладки)
+      if (currentStreamFilter && currentStreamFilter !== "Все") {
+        if (getTalkStream(talk) !== currentStreamFilter) return false;
+      }
+
+      // Фильтр по избранному
+      if (showOnlyFavorites && !favoritesSet.has(talk.id)) {
+        return false;
       }
 
       // Фильтр по поиску
@@ -316,10 +390,13 @@
       return inTitle || inSpeakers;
     }
 
-    function createTalkCard(talk) {
+    function createTalkCard(talk, isFavorite) {
       const card = document.createElement("article");
       card.className =
         "relative flex gap-4 sm:gap-6 rounded-3xl bg-slate-900/80 border border-slate-800 shadow-lg shadow-black/40 px-4 py-4 sm:px-6 sm:py-5 hover:shadow-xl hover:border-slate-700 transition animate-fade-in";
+
+      const fillValue = isFavorite ? "currentColor" : "none";
+      const starColorClass = isFavorite ? "text-yellow-400" : "text-slate-400/40";
 
       card.innerHTML = `
         <div class="flex flex-col items-start justify-center w-20 sm:w-24 flex-shrink-0">
@@ -356,18 +433,34 @@
         <button
           type="button"
           aria-label="Добавить в избранное"
+          data-role="favorite-toggle"
+          data-talk-id="${talk.id}"
           class="absolute right-3 top-3 inline-flex items-center justify-center rounded-full p-1.5 hover:bg-slate-800/80 transition">
           <!-- Heroicons: Star (outline) -->
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-5 sm:w-5 ${starColorClass}" viewBox="0 0 24 24" fill="${fillValue}">
             <path
               d="M11.48 3.5a.75.75 0 011.04 0l2.14 2.26 2.96.69a.75.75 0 01.45 1.16L16.7 10.7l.32 2.99a.75.75 0 01-1.08.74L12 12.96l-3.94 1.47a.75.75 0 01-1.08-.74l.32-2.99-1.37-3.09a.75.75 0 01.45-1.16l2.96-.69 2.14-2.26z"
-              stroke="#9ca3af"
+              stroke="currentColor"
               stroke-width="1.5"
-              fill="none"
               stroke-linejoin="round" />
           </svg>
         </button>
       `;
+
+      const starBtn = card.querySelector("[data-role='favorite-toggle']");
+      const starIcon = starBtn.querySelector("svg");
+
+      starBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const talkId = talk.id;
+        toggleFavorite(talkId);
+
+        // Анимация "поп" при клике
+        starIcon.classList.remove("star-pop");
+        // форсируем reflow, чтобы анимация могла переигрываться
+        void starIcon.offsetWidth;
+        starIcon.classList.add("star-pop");
+      });
 
       return card;
     }
@@ -389,7 +482,7 @@
           Нет докладов по запросу
         </div>
         <p class="text-sm text-slate-400 max-w-sm">
-          Попробуйте изменить текст поиска или выбрать другой трек.
+          Попробуйте изменить текст поиска, трек или поток.
         </p>
       `;
 
@@ -411,15 +504,98 @@
       }
 
       filteredTalks.forEach((talk) => {
-        container.appendChild(createTalkCard(talk));
+        const isFavorite = favoritesSet.has(talk.id);
+        container.appendChild(createTalkCard(talk, isFavorite));
+      });
+    }
+
+    function loadFavoritesFromStorage() {
+      try {
+        const raw = window.localStorage.getItem("favorites");
+        if (!raw) {
+          favoritesSet = new Set();
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          favoritesSet = new Set(parsed);
+        } else {
+          favoritesSet = new Set();
+        }
+      } catch (e) {
+        favoritesSet = new Set();
+      }
+    }
+
+    function saveFavoritesToStorage() {
+      const arr = Array.from(favoritesSet);
+      window.localStorage.setItem("favorites", JSON.stringify(arr));
+    }
+
+    function updateFavoritesCounter() {
+      const counterEl = document.getElementById("favoritesCounter");
+      if (!counterEl) return;
+      counterEl.textContent = `Избранные: ${favoritesSet.size}`;
+    }
+
+    function updateFavoritesToggleButton() {
+      const btn = document.getElementById("favoritesToggleBtn");
+      const label = document.getElementById("favoritesToggleLabel");
+      if (!btn || !label) return;
+
+      if (showOnlyFavorites) {
+        label.textContent = "Показать все доклады";
+        btn.classList.remove("bg-emerald-500", "text-slate-950");
+        btn.classList.add("bg-amber-400", "text-slate-900");
+      } else {
+        label.textContent = "Показать избранное";
+        btn.classList.remove("bg-amber-400", "text-slate-900");
+        btn.classList.add("bg-emerald-500", "text-slate-950");
+      }
+    }
+
+    function updateFavoritesUI() {
+      updateFavoritesCounter();
+      updateFavoritesToggleButton();
+    }
+
+    function toggleFavorite(talkId) {
+      if (favoritesSet.has(talkId)) {
+        favoritesSet.delete(talkId);
+      } else {
+        favoritesSet.add(talkId);
+      }
+      saveFavoritesToStorage();
+      updateFavoritesUI();
+      renderTalks();
+    }
+
+    function updateStreamTabsUI() {
+      const tabs = document.querySelectorAll("[data-stream-tab]");
+      tabs.forEach((tab) => {
+        const value = tab.dataset.streamTab;
+        const isActive = value === currentStreamFilter;
+
+        if (isActive) {
+          tab.classList.add("bg-slate-900", "text-slate-100", "border-slate-600");
+          tab.classList.remove("bg-transparent", "text-slate-400", "border-slate-700/40");
+        } else {
+          tab.classList.remove("bg-slate-900", "text-slate-100", "border-slate-600");
+          tab.classList.add("bg-transparent", "text-slate-400", "border-slate-700/40");
+        }
       });
     }
 
     document.addEventListener("DOMContentLoaded", () => {
       const trackSelect = document.getElementById("trackFilter");
       const searchInput = document.getElementById("searchInput");
+      const favoritesToggleBtn = document.getElementById("favoritesToggleBtn");
 
-      // Восстанавливаем фильтр из localStorage
+      // Восстанавливаем избранное
+      loadFavoritesFromStorage();
+      updateFavoritesUI();
+
+      // Восстанавливаем фильтр по треку из localStorage
       const savedTrack = window.localStorage.getItem("prosalesb2b_track_filter");
       if (savedTrack) {
         const options = Array.from(trackSelect.options).map((o) => o.value);
@@ -433,17 +609,37 @@
         currentTrackFilter = trackSelect.value;
       }
 
-      // Обработчики
+      // Обработчики для трека
       trackSelect.addEventListener("change", () => {
         currentTrackFilter = trackSelect.value;
         window.localStorage.setItem("prosalesb2b_track_filter", currentTrackFilter);
         renderTalks();
       });
 
+      // Обработчик поиска
       searchInput.addEventListener("input", () => {
         currentSearchQuery = searchInput.value || "";
         renderTalks();
       });
+
+      // Обработчик кнопки "Показать избранное"
+      favoritesToggleBtn.addEventListener("click", () => {
+        showOnlyFavorites = !showOnlyFavorites;
+        updateFavoritesToggleButton();
+        renderTalks();
+      });
+
+      // Обработчики вкладок потоков
+      const streamTabs = document.querySelectorAll("[data-stream-tab]");
+      streamTabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          currentStreamFilter = tab.dataset.streamTab || "Все";
+          updateStreamTabsUI();
+          renderTalks();
+        });
+      });
+      // начальное состояние вкладок
+      updateStreamTabsUI();
 
       // Первичная отрисовка
       renderTalks();
